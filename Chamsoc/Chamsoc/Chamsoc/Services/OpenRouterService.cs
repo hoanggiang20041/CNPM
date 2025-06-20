@@ -65,7 +65,7 @@ namespace Chamsoc.Services
                 if (messages == null || !messages.Any())
                 {
                     _logger.LogError("Messages list is null or empty");
-                    return "❌ Lỗi: Không có tin nhắn để gửi";
+                    return "❌ Lỗi rồi: Không có tin nhắn để gửi";
                 }
 
                 // Add system message if not present
