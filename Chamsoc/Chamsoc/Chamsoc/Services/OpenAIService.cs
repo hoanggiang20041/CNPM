@@ -54,7 +54,7 @@ namespace Chamsoc.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    return $"❌ Lỗi từ OpenAI: {response.StatusCode}";
+                    return $"❌ Lỗi xảy ra từ OpenAI: {response.StatusCode}";
                 }
 
                 var responseJson = await response.Content.ReadAsStringAsync();
