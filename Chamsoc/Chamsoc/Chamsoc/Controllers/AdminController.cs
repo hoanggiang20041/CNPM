@@ -906,214 +906,34 @@ namespace Chamsoc.Controllers
         [HttpGet]
         public IActionResult AddUser()
         {
-            ViewData["Title"] = "Thêm người dùng";
             return View();
         }
 
         [HttpPost]
-        public async Task<IActionResult> AddUser(string username, string email, string phoneNumber, string password, string role, string name, int? age, string careNeeds, bool? status, string skills, bool? isAvailable, IFormFile degree, IFormFile identityDocs, IFormFile certificate, decimal price)
+        public IActionResult AddUser(UserViewModel model)
         {
-            try
+            if (ModelState.IsValid)
             {
-                // Kiểm tra định dạng email
-                if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                var existingUser = _userManager.Users.FirstOrDefault(u => u.Email == model.Email);
+                if (existingUser != null)
                 {
-                    TempData["ErrorMessage"] = $"Email không hợp lệ. Giá trị hiện tại: \"{email}\".";
-                    return View();
+                    ModelState.AddModelError("Email", "Email đã tồn tại");
+                    return View(model);
                 }
-
-                // Kiểm tra trùng lặp username
-                if (await _userManager.FindByNameAsync(username) != null)
-                {
-                    TempData["ErrorMessage"] = $"Tên đăng nhập đã tồn tại. Giá trị hiện tại: \"{username}\".";
-                    return View();
-                }
-
-                // Kiểm tra trùng lặp email
-                if (await _userManager.FindByEmailAsync(email) != null)
-                {
-                    TempData["ErrorMessage"] = $"Email đã tồn tại. Giá trị hiện tại: \"{email}\".";
-                    return View();
-                }
-
-                // Kiểm tra trùng lặp số điện thoại
-                if (!string.IsNullOrEmpty(phoneNumber) && _context.Users.Any(u => u.PhoneNumber == phoneNumber))
-                {
-                    TempData["ErrorMessage"] = $"Số điện thoại đã tồn tại. Giá trị hiện tại: \"{phoneNumber}\".";
-                    return View();
-                }
-
-                // Kiểm tra các trường bắt buộc
-                if (string.IsNullOrEmpty(name) || name.Trim() == "")
-                {
-                    TempData["ErrorMessage"] = $"Vui lòng nhập họ và tên. Giá trị hiện tại: \"{name}\".";
-                    return View();
-                }
-
-                // Kiểm tra giá (Price)
-                if (price <= 0)
-                {
-                    TempData["ErrorMessage"] = $"Giá mong muốn phải lớn hơn 0. Giá trị hiện tại: \"{price}\".";
-                    return View();
-                }
-
-                // Tạo user mới
+                
                 var user = new ApplicationUser
                 {
-                    UserName = username,
-                    Email = email,
-                    PhoneNumber = phoneNumber,
-                    Role = role,
-                    IsLocked = false,
-                    Balance = 0,
-                    FullName = name,
-                    Address = "Chưa cập nhật",
-                    DateOfBirth = new DateTime(1990, 1, 1),
-                    Gender = "Chưa cập nhật",
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    EmailConfirmed = true,
-                    PhoneNumberConfirmed = true,
-                    NormalizedUserName = username.ToUpper(),
-                    NormalizedEmail = email.ToUpper(),
-                    RoleId = "0" // Giá trị mặc định
+                    FullName = model.FullName,
+                    Email = model.Email,
+                    Role = model.Role,
+                    Status = model.Status
                 };
-
-                var result = await _userManager.CreateAsync(user, password);
-                if (!result.Succeeded)
-                {
-                    TempData["ErrorMessage"] = "Thêm người dùng thất bại: " + string.Join(", ", result.Errors.Select(e => e.Description));
-                    return View();
-                }
-
-                // Gán vai trò cho người dùng
-                await _userManager.AddToRoleAsync(user, role);
-
-                if (role == "Senior")
-                {
-                    if (!age.HasValue || age <= 0)
-                    {
-                        TempData["ErrorMessage"] = $"Vui lòng nhập tuổi hợp lệ. Giá trị hiện tại: \"{age}\".";
-                        await _userManager.DeleteAsync(user);
-                        return View();
-                    }
-
-                    if (string.IsNullOrEmpty(careNeeds))
-                    {
-                        TempData["ErrorMessage"] = $"Vui lòng nhập nhu cầu chăm sóc. Giá trị hiện tại: \"{careNeeds}\".";
-                        await _userManager.DeleteAsync(user);
-                        return View();
-                    }
-
-                    string identityDocsPath = null;
-                    if (identityDocs != null && identityDocs.Length > 0)
-                    {
-                        identityDocsPath = await SaveFile(identityDocs, "identityAndHealthDocs");
-                    }
-
-                    var senior = new Senior
-                    {
-                        UserId = user.Id,
-                        Name = name,
-                        Age = age.Value,
-                        CareNeeds = careNeeds,
-                        RegistrationDate = DateTime.Now,
-                        Status = status ?? false,
-                        IsVerified = false,
-                        AvatarUrl = "https://via.placeholder.com/150",
-                        Price = price,
-                        IdentityAndHealthDocs = identityDocsPath
-                    };
-                    _context.Seniors.Add(senior);
-                    await _context.SaveChangesAsync();
-                    user.RoleId = senior.Id.ToString();
-                }
-                else if (role == "Caregiver")
-                {
-                    if (string.IsNullOrEmpty(skills))
-                    {
-                        TempData["ErrorMessage"] = $"Vui lòng nhập kỹ năng chăm sóc. Giá trị hiện tại: \"{skills}\".";
-                        await _userManager.DeleteAsync(user);
-                        return View();
-                    }
-
-                    string certificateFilePath = null;
-                    if (certificate != null && certificate.Length > 0)
-                    {
-                        certificateFilePath = await SaveFile(certificate, "certificates");
-                    }
-
-                    string identityDocsPath = null;
-                    if (identityDocs != null && identityDocs.Length > 0)
-                    {
-                        identityDocsPath = await SaveFile(identityDocs, "identityAndHealthDocs");
-                    }
-
-                    // Đảm bảo price luôn có giá trị hợp lệ và không null
-                    decimal finalPrice = price > 0 ? price : 800000;
-
-                    // Tạo chuỗi JSON pricing với định dạng cố định
-                    string pricing = $"{{\"1Hour\": {finalPrice}, \"2Hours\": {finalPrice * 1.8m}, \"5Sessions\": {finalPrice * 4.5m}}}";
-
-                    var caregiver = new Caregiver
-                    {
-                        UserId = user.Id,
-                        Name = name,
-                        Skills = skills,
-                        Contact = phoneNumber,
-                        IsAvailable = isAvailable ?? false,
-                        CertificateFilePath = certificateFilePath,
-                        IdentityAndHealthDocs = identityDocsPath,
-                        IsVerified = false,
-                        AvatarUrl = "https://via.placeholder.com/150",
-                        Price = finalPrice,
-                        Pricing = pricing,
-                        Experience = "Chưa có kinh nghiệm"
-                    };
-                    _context.Caregivers.Add(caregiver);
-                    await _context.SaveChangesAsync();
-                    user.RoleId = caregiver.Id.ToString();
-                }
-
-                // Cập nhật RoleId của user
-                await _userManager.UpdateAsync(user);
-
-                TempData["SuccessMessage"] = "Thêm người dùng thành công!";
+                
+                _userManager.CreateAsync(user, model.Password);
+                TempData["Success"] = "Thêm người dùng thành công!";
                 return RedirectToAction("ManageUsers");
             }
-            catch (Exception ex)
-            {
-                TempData["ErrorMessage"] = $"Lỗi không xác định: {ex.Message}";
-                if (ex.InnerException != null)
-                {
-                    TempData["ErrorMessage"] += $" - {ex.InnerException.Message}";
-                }
-                return View();
-            }
-        }
-
-        private async Task<string> SaveFile(IFormFile file, string folderName)
-        {
-            if (file == null || file.Length == 0)
-            {
-                return null;
-            }
-
-            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads", folderName);
-            if (!Directory.Exists(uploadsFolder))
-            {
-                Directory.CreateDirectory(uploadsFolder);
-            }
-
-            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-            var filePath = Path.Combine(uploadsFolder, fileName);
-
-            using (var fileStream = new FileStream(filePath, FileMode.Create))
-            {
-                await file.CopyToAsync(fileStream);
-            }
-
-            return $"/uploads/{folderName}/{fileName}";
+            return View(model);
         }
 
         [HttpGet]
